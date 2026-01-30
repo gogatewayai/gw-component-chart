@@ -1,0 +1,22 @@
+gateway:
+  name: "example-gateway"
+
+service:
+  name: "timeout-svc"
+  ports:
+    - name: "http"
+      port: 8080
+
+routes:
+  - name: "timeout-example"
+    enabled: true
+    hostnames:
+      - "example.com"
+    configMapHostnames:
+      enabled: false
+    matches:
+      - type: PathPrefix
+        value: "/timeout"
+    timeouts:
+      request: 10s
+      backendRequest: 2s

@@ -53,6 +53,15 @@ spec:
         type: {{ .type }}
         value: {{ .value | quote }}
     {{- end }}
+    {{- if $route.timeouts }}
+    timeouts:
+      {{- if $route.timeouts.request }}
+      request: {{ $route.timeouts.request }}
+      {{- end }}
+      {{- if $route.timeouts.backendRequest }}
+      backendRequest: {{ $route.timeouts.backendRequest }}
+      {{- end }}
+    {{- end }}
     {{- if $route.backendPath }}
     filters:
     - type: URLRewrite
