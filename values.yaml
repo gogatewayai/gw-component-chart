@@ -66,6 +66,9 @@ overrideContainers: {}
 #     matches:
 #       - type: PathPrefix
 #         value: "/newui"
+#     timeouts:
+#       request: 10s
+#       backendRequest: 2s
 #     healthCheck:
 #       checkIntervalSec: 15
 #       timeoutSec: 10
