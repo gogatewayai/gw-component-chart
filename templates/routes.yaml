@@ -9,7 +9,7 @@ metadata:
 spec:
   parentRefs:
   - name: {{ $.Values.gateway.name }}
-    namespace: {{ $.Release.Namespace }}
+    namespace: {{ $.Values.gateway.namespace | default $.Release.Namespace }}
   hostnames:
   {{- if $route.configMapHostnames.enabled }}
     {{- $configMap := lookup "v1" "ConfigMap" $.Release.Namespace $route.configMapHostnames.name }}

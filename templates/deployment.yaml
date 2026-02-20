@@ -1,21 +1,7 @@
 {{- range $containerIndex, $containerUnused := $.Values.containers }}
 {{- if eq $containerIndex 0 }}
 apiVersion: apps/v1
-{{- $kind := "Deployment" }}
-{{- range $containerIndex, $container := $.Values.containers }}
-  {{- range $volumeMountIndex, $volumeMount := $container.volumeMounts }}
-    {{- if or $volumeMount.readOnly $volumeMount.volume.readOnly }}
-    {{- else }}
-      {{- range $volumeIndex, $volume := $.Values.volumes }}
-        {{- if not (or (hasKey $volume "secret") (hasKey $volume "configMap") (hasKey $volume "emptyDir") (hasKey $volume "hostPath") (hasKey $volume "ephemeral") ) }}
-        {{- if eq $volumeMount.volume.name $volume.name }}
-          {{- $kind = "StatefulSet" }}
-        {{- end }}
-        {{- end }}
-      {{- end }}
-    {{- end }}
-  {{- end }}
-{{- end }}
+{{- $kind := default "Deployment" $.Values.kind }}
 {{- $allContainers := list }}
 {{- range $idx, $container := $.Values.containers }}
   {{- $allContainers = append $allContainers $container }}
