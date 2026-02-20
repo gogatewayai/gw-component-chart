@@ -3,6 +3,7 @@
 # take a look at the documentation: https://devspace.cloud/docs/cli/deployment/components/configuration/overview-specification
 
 # A list of containers that should run the pods of this component
+kind: Deployment
 containers: []
 initContainers: []
 
