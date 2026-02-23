@@ -1,0 +1,40 @@
+{{- if .Values.healthChecks -}}
+{{- range $hc := .Values.healthChecks -}}
+{{- if not (and $hc.name $hc.serviceName $hc.port $hc.requestPath) }}
+  {{- fail (printf "Top-level healthCheck requires 'name', 'serviceName', 'port', and 'requestPath'. Found: name=%v, serviceName=%v" $hc.name $hc.serviceName) }}
+{{- end }}
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: {{ printf "%s-%s-hc" $.Release.Name $hc.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  targetRef:
+    group: ""
+    kind: Service
+    name: {{ $hc.serviceName }}
+  default:
+    {{- if $hc.checkIntervalSec }}
+    checkIntervalSec: {{ $hc.checkIntervalSec }}
+    {{- end }}
+    {{- if $hc.timeoutSec }}
+    timeoutSec: {{ $hc.timeoutSec }}
+    {{- end }}
+    {{- if $hc.unhealthyThreshold }}
+    unhealthyThreshold: {{ $hc.unhealthyThreshold }}
+    {{- end }}
+    {{- if $hc.healthyThreshold }}
+    healthyThreshold: {{ $hc.healthyThreshold }}
+    {{- end }}
+    {{- if $hc.logConfig }}
+    logConfig:
+      enabled: {{ $hc.logConfig.enabled }}
+    {{- end }}
+    config:
+      type: "HTTP"
+      httpHealthCheck:
+        port: {{ $hc.port }}
+        requestPath: {{ $hc.requestPath | quote }}
+{{- end }}
+{{- end }}

@@ -214,18 +214,82 @@ serviceWatcher:
     *   New `gateway` and `routes` configuration blocks have been added to support Kubernetes Gateway API.
     *   New `customServiceAccount` and `serviceWatcher` configuration blocks have been added.
     *   The `routes` configuration now supports an optional `subdomains` field under `configMapHostnames` for dynamic subdomain creation.
+    *   The `routes` configuration now supports `backendRefs` for multi-backend routing and automated `HealthCheckPolicy` generation for GKE.
+    *   A new top-level `healthChecks` block allows defining `HealthCheckPolicy` resources independently of routes.
     *   Comments have been updated to reflect these changes and provide guidance.
 
 *   **`templates/deployment.yaml`**:
+=======
+    *   New `customServiceAccount` and `serviceWatcher` configuration blocks have been added.
+    *   The `routes` configuration now supports an optional `subdomains` field under `configMapHostnames` for dynamic subdomain creation.
+    *   The `routes` configuration now supports `backendRefs` for multi-backend routing and automated `HealthCheckPolicy` generation for GKE.
+    *   A new top-level `healthChecks` block allows defining `HealthCheckPolicy` resources independently of routes.
+    *   Comments have been updated to reflect these changes and provide guidance.
+
+#### 2.2 Multi-Backend Support and Health Check Policies (New)
+
+The `HTTPRoute` template now supports the `backendRefs` field, allowing traffic to be split across multiple backend services. Additionally, the chart can now automatically generate GKE-specific `HealthCheckPolicy` resources for each backend service defined in a route.
+
+**Key Features:**
+- **`backendRefs`**: Explicitly define multiple backend services with different weights and ports.
+- **Automated Health Checks**: When `healthCheck` is defined in a route, a `HealthCheckPolicy` is generated for *each* backend service listed in `backendRefs`.
+- **Top-Level `healthChecks`**: Define global or standalone health checks that are not tied to a specific route.
+
+**Usage Example in `values.yaml`:**
+
+```yaml
+routes:
+  - name: "multi-backend-route"
+    enabled: true
+    hostnames: ["app.example.com"]
+    backendRefs:
+      - name: "primary-service"
+        port: 80
+        weight: 90
+      - name: "canary-service"
+        port: 80
+        weight: 10
+    healthCheck:
+      checkIntervalSec: 15
+      timeoutSec: 10
+      unhealthyThreshold: 3
+      healthyThreshold: 1
+      httpHealthCheck:
+        requestPath: "/healthz"
+
+# Independent Health Checks
+healthChecks:
+  - name: "standalone-hc"
+    serviceName: "some-other-service"
+    port: 8080
+    requestPath: "/health"
+```
+
+*   **`templates/deployment.yaml`**:
+>>>>>>> REPLACE
     *   The templating logic for `containers` and `initContainers` has been updated to check for `$.Values.overrideContainers`.
     *   When `overrideContainers` is present for a specific container, its `image`, `env`, and `resources` values are merged with the container's existing definitions, with `overrideContainers` taking precedence.
 
 *   **`templates/routes.yaml`**:
     *   This file contains the logic to generate `HTTPRoute` resources based on the `$.Values.routes` configuration.
     *   Updated to support the new `subdomains` field under `configMapHostnames`. When subdomains are specified, ONLY the subdomain-prefixed hostnames are created (the base domain is excluded).
+    *   Enhanced with `backendRefs` support and automated `HealthCheckPolicy` generation for all defined backends.
+
+*   **`templates/health-check-policies.yaml`**:
+    *   New template to support the top-level `healthChecks` configuration, allowing for standalone GKE `HealthCheckPolicy` resources.
 
 *   **`templates/serviceaccount.yaml`**: 
-    *   This file would contain the logic to generate `ServiceAccount` resources based on the `$.Values.customServiceAccount` configuration.
+=======
+*   **`templates/routes.yaml`**:
+    *   This file contains the logic to generate `HTTPRoute` resources based on the `$.Values.routes` configuration.
+    *   Updated to support the new `subdomains` field under `configMapHostnames`. When subdomains are specified, ONLY the subdomain-prefixed hostnames are created (the base domain is excluded).
+    *   Enhanced with `backendRefs` support and automated `HealthCheckPolicy` generation for all defined backends.
+
+*   **`templates/health-check-policies.yaml`**:
+    *   New template to support the top-level `healthChecks` configuration, allowing for standalone GKE `HealthCheckPolicy` resources.
+
+*   **`templates/serviceaccount.yaml`**: 
+>>>>>>> REPLACE    *   This file would contain the logic to generate `ServiceAccount` resources based on the `$.Values.customServiceAccount` configuration.
 
 *   **`templates/service-watcher.yaml`**: 
     *   This file would contain the logic to generate `Role` and `RoleBinding` resources based on the `$.Values.serviceWatcher` configuration.
