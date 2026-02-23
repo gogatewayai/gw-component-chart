@@ -1,0 +1,91 @@
+service:
+  name: default-service
+  ports:
+  - name: http
+    port: 80
+
+gateway:
+  name: main-gateway
+  namespace: gateway-system
+
+routes:
+- name: internal-route
+  enabled: true
+  configMapHostnames:
+    enabled: false
+  hostnames:
+  - app.internal.example.com
+  matches:
+  - type: PathPrefix
+    value: /api
+  # Testing default backend (from .Values.service) with healthCheck
+  healthCheck:
+    checkIntervalSec: 30
+    timeoutSec: 10
+    httpHealthCheck:
+      requestPath: /healthz
+
+- name: external-route
+  enabled: true
+  configMapHostnames:
+    enabled: false
+  hostnames:
+  - app.external.example.com
+  matches:
+  - type: PathPrefix
+    value: /
+  backendRefs:
+  - name: specific-service
+    port: 8080
+  - name: fallback-service
+    port: 9090
+  # healthCheck for multiple backends
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    unhealthyThreshold: 2
+    healthyThreshold: 1
+    logConfig:
+      enabled: true
+    httpHealthCheck:
+      requestPath: /healthz
+
+- name: custom-port-route
+  enabled: true
+  configMapHostnames:
+    enabled: false
+  hostnames:
+  - port.example.com
+  matches:
+  - type: PathPrefix
+    value: /port-test
+  backendRefs:
+  - name: port-service
+    port: 7070
+  # Testing port override in healthCheck
+  healthCheck:
+    port: 9999
+    httpHealthCheck:
+      requestPath: /ready
+
+healthChecks:
+- name: specific-service-hc
+  serviceName: specific-service
+  port: 8080
+  requestPath: /healthz
+  checkIntervalSec: 5
+  timeoutSec: 5
+  unhealthyThreshold: 2
+  healthyThreshold: 1
+  logConfig:
+    enabled: true
+- name: fallback-service-hc
+  serviceName: fallback-service
+  port: 9090
+  requestPath: /healthz
+  checkIntervalSec: 5
+  timeoutSec: 5
+  unhealthyThreshold: 2
+  healthyThreshold: 1
+  logConfig:
+    enabled: true

@@ -11,24 +11,29 @@ spec:
   - name: {{ $.Values.gateway.name }}
     namespace: {{ $.Values.gateway.namespace | default $.Release.Namespace }}
   hostnames:
-  {{- if $route.configMapHostnames.enabled }}
+  {{- if and $route.configMapHostnames $route.configMapHostnames.enabled }}
+    {{- if not (and $route.configMapHostnames.name $route.configMapHostnames.keys) }}
+      {{- fail (printf "configMapHostnames requires 'name' and 'keys' for route '%s'" $route.name) }}
+    {{- end }}
     {{- $configMap := lookup "v1" "ConfigMap" $.Release.Namespace $route.configMapHostnames.name }}
     {{- if $configMap }}
       {{- $allHostnames := list }}
       {{- range $key := $route.configMapHostnames.keys }}
-        {{- $hostnamesString := index $configMap.data $key }}
-        {{- if $hostnamesString }}
-          {{- range split "," $hostnamesString }}
-            {{- $hostname := . | trim }}
-            {{- /* If subdomains are specified, only add subdomain-prefixed versions */ -}}
-            {{- if $route.configMapHostnames.subdomains }}
-              {{- range $subdomain := $route.configMapHostnames.subdomains }}
-                {{- $subdomainHostname := printf "%s.%s" $subdomain $hostname }}
-                {{- $allHostnames = append $allHostnames $subdomainHostname }}
+        {{- if hasKey $configMap.data $key }}
+          {{- $hostnamesString := index $configMap.data $key }}
+          {{- if $hostnamesString }}
+            {{- range split "," $hostnamesString }}
+              {{- $hostname := . | trim }}
+              {{- /* If subdomains are specified, only add subdomain-prefixed versions */ -}}
+              {{- if $route.configMapHostnames.subdomains }}
+                {{- range $subdomain := $route.configMapHostnames.subdomains }}
+                  {{- $subdomainHostname := printf "%s.%s" $subdomain $hostname }}
+                  {{- $allHostnames = append $allHostnames $subdomainHostname }}
+                {{- end }}
+              {{- else }}
+                {{- /* No subdomains specified, add the original hostname */ -}}
+                {{- $allHostnames = append $allHostnames $hostname }}
               {{- end }}
-            {{- else }}
-              {{- /* No subdomains specified, add the original hostname */ -}}
-              {{- $allHostnames = append $allHostnames $hostname }}
             {{- end }}
           {{- end }}
         {{- else }}
@@ -71,6 +76,9 @@ spec:
           replacePrefixMatch: {{ $route.backendPath | quote }}
     {{- end }}
     backendRefs:
+    {{- if $route.backendRefs }}
+    {{- toYaml $route.backendRefs | nindent 4 }}
+    {{- else }}
     - name: {{ $.Values.service.name }}
       {{- $portName := $route.servicePortName | default "http" }}
       {{- $targetPort := "" }}
@@ -83,40 +91,81 @@ spec:
         {{- fail (printf "Service port with name '%s' not found for service '%s' in route '%s'" $portName $.Values.service.name $route.name) }}
       {{- end }}
       port: {{ $targetPort }}
+    {{- end }}
 {{- if $route.healthCheck }}
+{{- $healthCheckBackends := list }}
+{{- if $route.backendRefs }}
+  {{- range $route.backendRefs }}
+    {{- $healthCheckBackends = append $healthCheckBackends . }}
+  {{- end }}
+{{- else }}
+  {{- $defaultBackend := dict "name" $.Values.service.name }}
+  {{- $portName := $route.servicePortName | default "http" }}
+  {{- $targetPort := "" }}
+  {{- range $.Values.service.ports }}
+    {{- if eq .name $portName }}
+      {{- $targetPort = .port }}
+    {{- end }}
+  {{- end }}
+  {{- $_ := set $defaultBackend "port" $targetPort }}
+  {{- $healthCheckBackends = append $healthCheckBackends $defaultBackend }}
+{{- end }}
+{{- range $backend := $healthCheckBackends }}
 ---
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
 metadata:
-  name: {{ $.Release.Name }}-{{ $route.name }}-health-check-policy
+  name: {{ printf "%s-%s-%s-hc" $.Release.Name $route.name $backend.name | trunc 63 | trimSuffix "-" }}
   namespace: {{ $.Release.Namespace }}
 spec:
   targetRef:
     group: ""
     kind: Service
-    name: {{ $.Values.service.name }}
+    name: {{ $backend.name }}
   default:
+    {{- if $route.healthCheck.checkIntervalSec }}
     checkIntervalSec: {{ $route.healthCheck.checkIntervalSec }}
+    {{- end }}
+    {{- if $route.healthCheck.timeoutSec }}
     timeoutSec: {{ $route.healthCheck.timeoutSec }}
+    {{- end }}
+    {{- if $route.healthCheck.unhealthyThreshold }}
     unhealthyThreshold: {{ $route.healthCheck.unhealthyThreshold }}
+    {{- end }}
+    {{- if $route.healthCheck.healthyThreshold }}
     healthyThreshold: {{ $route.healthCheck.healthyThreshold }}
+    {{- end }}
+    {{- if $route.healthCheck.logConfig }}
     logConfig:
       enabled: {{ $route.healthCheck.logConfig.enabled }}
+    {{- end }}
     config:
       type: "HTTP"
       httpHealthCheck:
-        {{- $healthCheckPortName := $route.servicePortName | default "http" }}
         {{- $healthCheckTargetPort := "" }}
-        {{- range $.Values.service.ports }}
-          {{- if eq .name $healthCheckPortName }}
-            {{- $healthCheckTargetPort = .port }}
+        {{- if $route.healthCheck.port }}
+          {{- $healthCheckTargetPort = $route.healthCheck.port }}
+        {{- else if $backend.port }}
+          {{- $healthCheckTargetPort = $backend.port }}
+        {{- else }}
+          {{- $searchServiceName := $backend.name }}
+          {{- $searchServicePorts := list }}
+          {{- if eq $searchServiceName $.Values.service.name }}
+            {{- $searchServicePorts = $.Values.service.ports }}
+          {{- end }}
+          {{- $portName := $route.servicePortName | default "http" }}
+          {{- range $searchServicePorts }}
+            {{- if eq .name $portName }}
+              {{- $healthCheckTargetPort = .port }}
+            {{- end }}
           {{- end }}
         {{- end }}
         {{- if not $healthCheckTargetPort }}
-          {{- fail (printf "Service port with name '%s' not found for health check of service '%s' in route '%s'" $healthCheckPortName $.Values.service.name $route.name) }}
+          {{- fail (printf "Service port for health check of service '%s' in route '%s' could not be determined. Please specify port in backendRefs or healthCheck.port." $backend.name $route.name) }}
         {{- end }}
         port: {{ $healthCheckTargetPort }}
         requestPath: {{ $route.healthCheck.httpHealthCheck.requestPath | quote }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
