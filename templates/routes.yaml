@@ -11,45 +11,43 @@ spec:
   - name: {{ $.Values.gateway.name }}
     namespace: {{ $.Values.gateway.namespace | default $.Release.Namespace }}
   hostnames:
+  {{- $allHostnames := list }}
   {{- if and $route.configMapHostnames $route.configMapHostnames.enabled }}
-    {{- if not (and $route.configMapHostnames.name $route.configMapHostnames.keys) }}
-      {{- fail (printf "configMapHostnames requires 'name' and 'keys' for route '%s'" $route.name) }}
-    {{- end }}
-    {{- $configMap := lookup "v1" "ConfigMap" $.Release.Namespace $route.configMapHostnames.name }}
-    {{- if $configMap }}
-      {{- $allHostnames := list }}
-      {{- range $key := $route.configMapHostnames.keys }}
-        {{- if hasKey $configMap.data $key }}
-          {{- $hostnamesString := index $configMap.data $key }}
-          {{- if $hostnamesString }}
-            {{- range split "," $hostnamesString }}
-              {{- $hostname := . | trim }}
-              {{- /* If subdomains are specified, only add subdomain-prefixed versions */ -}}
-              {{- if $route.configMapHostnames.subdomains }}
-                {{- range $subdomain := $route.configMapHostnames.subdomains }}
-                  {{- $subdomainHostname := printf "%s.%s" $subdomain $hostname }}
-                  {{- $allHostnames = append $allHostnames $subdomainHostname }}
+    {{- if and $route.configMapHostnames.name $route.configMapHostnames.keys }}
+
+      {{- $configMap := lookup "v1" "ConfigMap" $.Release.Namespace $route.configMapHostnames.name }}
+
+      {{- if $configMap }}
+        {{- range $key := $route.configMapHostnames.keys }}
+          {{- if hasKey $configMap.data $key }}
+            {{- $hostnamesString := index $configMap.data $key }}
+            {{- if $hostnamesString }}
+              {{- range split "," $hostnamesString }}
+                {{- $hostname := . | trim }}
+                {{- if $route.configMapHostnames.subdomains }}
+                  {{- range $subdomain := $route.configMapHostnames.subdomains }}
+                    {{- $allHostnames = append $allHostnames (printf "%s.%s" $subdomain $hostname) }}
+                  {{- end }}
+                {{- else }}
+                  {{- $allHostnames = append $allHostnames $hostname }}
                 {{- end }}
-              {{- else }}
-                {{- /* No subdomains specified, add the original hostname */ -}}
-                {{- $allHostnames = append $allHostnames $hostname }}
               {{- end }}
             {{- end }}
           {{- end }}
-        {{- else }}
-          {{- fail (printf "ConfigMap key '%s' not found in ConfigMap '%s' for route '%s'" $key $route.configMapHostnames.name $route.name) }}
         {{- end }}
       {{- end }}
-      {{- range $allHostnames }}
-      - {{ . | quote }}
-      {{- end }}
-    {{- else }}
-      {{- fail (printf "ConfigMap '%s' not found in namespace '%s' for route '%s'" $route.configMapHostnames.name $.Release.Namespace $route.name) }}
+
     {{- end }}
-  {{- else }}
+  {{- end }}
+  {{- /* Fallback if lookup failed or no hostnames found */ -}}
+  {{- if and (eq (len $allHostnames) 0) $route.hostnames }}
     {{- range $route.hostnames }}
-    - {{ . | quote }}
+      {{- $allHostnames = append $allHostnames . }}
     {{- end }}
+  {{- end }}
+  {{- /* Final render */ -}}
+  {{- range $allHostnames }}
+  - {{ . | quote }}
   {{- end }}
   rules:
   - matches:
@@ -161,7 +159,7 @@ spec:
           {{- end }}
         {{- end }}
         {{- if not $healthCheckTargetPort }}
-          {{- fail (printf "Service port for health check of service '%s' in route '%s' could not be determined. Please specify port in backendRefs or healthCheck.port." $backend.name $route.name) }}
+          {{- fail (printf "Service port for health check of service '%s' in route '%s' could not be determined. Please specify port." $backend.name $route.name) }}
         {{- end }}
         port: {{ $healthCheckTargetPort }}
         requestPath: {{ $route.healthCheck.httpHealthCheck.requestPath | quote }}
